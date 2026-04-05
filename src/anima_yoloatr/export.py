@@ -69,10 +69,6 @@ def export_onnx(
         opset_version=opset,
         input_names=["images"],
         output_names=["detections"],
-        dynamic_axes={
-            "images": {0: "batch_size"},
-            "detections": {0: "batch_size"},
-        },
     )
     print(f"[EXPORT] ONNX: {output_path} ({os.path.getsize(output_path) / 1e6:.1f} MB)")
     return output_path
@@ -146,20 +142,36 @@ def export_trt(
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
         print(f"[WARN] trtexec not available: {e}")
 
-    # Fallback to shared toolkit
+    # Fallback to shared toolkit (exports both fp16 and fp32 at once)
     shared_trt = "/mnt/forge-data/shared_infra/trt_toolkit/export_to_trt.py"
     if os.path.exists(shared_trt):
+        output_dir = os.path.dirname(output_path)
         cmd = [
             "python", shared_trt,
             "--onnx", onnx_path,
-            "--output", output_path,
-            "--precision", precision,
+            "--output-dir", output_dir,
         ]
+        if not fp16:
+            cmd.append("--no-fp16")
+        if fp16:
+            cmd.append("--no-fp32")
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
             if result.returncode == 0:
-                print(f"[EXPORT] TRT {precision} (shared toolkit): {output_path}")
-                return output_path
+                print(f"[EXPORT] TRT {precision} (shared toolkit): {output_dir}")
+                # Check if the expected output file exists
+                if os.path.exists(output_path):
+                    return output_path
+                # Try common naming patterns
+                for candidate in [
+                    output_path,
+                    os.path.join(output_dir, f"yoloatr_{precision}.trt"),
+                    os.path.join(output_dir, f"model_{precision}.engine"),
+                ]:
+                    if os.path.exists(candidate):
+                        return candidate
+                print(f"[WARN] TRT built but output file not found at {output_path}")
+                return output_dir
             print(f"[WARN] Shared TRT toolkit failed: {result.stderr[:200]}")
         except Exception as e:
             print(f"[WARN] Shared TRT toolkit error: {e}")

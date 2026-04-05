@@ -17,6 +17,7 @@ import argparse
 import numpy as np
 import torch
 import torch.nn as nn
+import torchvision
 from torch.utils.data import DataLoader
 
 from anima_yoloatr.utils import load_config
@@ -76,31 +77,22 @@ def non_max_suppression(
         y2 = y + h / 2
         boxes = torch.stack([x1, y1, x2, y2], dim=1)
 
-        # NMS per class
-        detections = []
-        for cls_id in cls_idx.unique():
-            cls_mask = (cls_idx.squeeze() == cls_id)
-            cls_boxes = boxes[cls_mask]
-            cls_conf_vals = conf[cls_mask].squeeze()
+        # NMS using torchvision (fast, batched)
+        conf_flat = conf.squeeze(-1)
+        cls_flat = cls_idx.squeeze(-1).float()
 
-            if cls_conf_vals.ndim == 0:
-                cls_conf_vals = cls_conf_vals.unsqueeze(0)
+        # Offset boxes by class for batched NMS
+        keep = torchvision.ops.batched_nms(
+            boxes, conf_flat, cls_flat.int(), iou_threshold,
+        )
+        keep = keep[:max_detections]
 
-            # Standard NMS
-            keep = _nms(cls_boxes, cls_conf_vals, iou_threshold)
-            for k in keep[:max_detections]:
-                detections.append(
-                    torch.cat([
-                        cls_boxes[k],
-                        cls_conf_vals[k:k + 1],
-                        cls_id.float().unsqueeze(0),
-                    ])
-                )
-
-        if detections:
-            result = torch.stack(detections)
-            # Sort by confidence
-            result = result[result[:, 4].argsort(descending=True)][:max_detections]
+        if keep.numel() > 0:
+            result = torch.cat([
+                boxes[keep],
+                conf_flat[keep].unsqueeze(-1),
+                cls_flat[keep].unsqueeze(-1),
+            ], dim=1)
             outputs.append(result)
         else:
             outputs.append(torch.zeros((0, 6), device=predictions.device))
@@ -332,11 +324,15 @@ def evaluate_model(
 
         # Separate labels per image in batch
         bs = images.shape[0]
+        img_size = images.shape[2]  # 640
         for bi in range(bs):
             all_detections.append(detections[bi].cpu())
             # Get targets for this image
             mask = labels[:, 0] == bi
-            img_targets = labels[mask, 1:]  # [K, 5]: cls, cx, cy, w, h
+            img_targets = labels[mask, 1:].clone()  # [K, 5]: cls, cx, cy, w, h
+            # Scale normalized coords to pixel coords to match detections
+            if img_targets.shape[0] > 0:
+                img_targets[:, 1:] *= img_size
             all_targets.append(img_targets)
 
     metrics = compute_metrics(
