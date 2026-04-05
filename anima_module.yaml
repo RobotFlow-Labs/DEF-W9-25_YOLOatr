@@ -1,0 +1,85 @@
+name: project_yoloatr
+version: "0.1.0"
+description: >
+  YOLOatr: Deep Learning Based Automatic Target Detection and Localization
+  in Thermal Infrared Imagery. Modified YOLOv5s with BiFPN neck and P2
+  small-object detection head for MWIR ATR.
+paper:
+  title: "YOLOatr: Deep Learning Based Automatic Target Detection and Localization in Thermal Infrared Imagery"
+  arxiv: "2507.11267"
+  venue: "IMVIP 2023"
+  authors:
+    - "Aon Safdar"
+    - "Usman Akram"
+    - "Waseem Anwar"
+    - "Basit Malik"
+    - "Mian Ibad Ali"
+
+domain: defense
+category: thermal_ir_detection
+wave: 9
+
+capabilities:
+  - automatic_target_detection
+  - automatic_target_recognition
+  - thermal_infrared_detection
+  - small_object_detection
+  - real_time_inference
+
+model:
+  architecture: yolov5s_modified
+  backbone: cspdarknet53_small
+  neck: bifpn
+  heads: 4  # P2, P3, P4, P5
+  parameters: 7086449
+  gflops: 16.4
+  input_size: [640, 640]
+  num_classes: 4  # T72_Tank, BTR70, SUV, Pickup
+
+training:
+  optimizer: sgd
+  learning_rate: 0.01
+  momentum: 0.937
+  weight_decay: 0.0005
+  batch_size: 32
+  epochs: 100
+  image_size: 640
+  from_scratch: true
+
+dataset:
+  name: dsiac_mwir
+  classes:
+    - T72_Tank
+    - BTR70
+    - SUV
+    - Pickup
+  num_classes: 4
+  format: yolo
+
+metrics:
+  correlated_map50: 0.996
+  decorrelated_map50: 0.377
+  inference_ms: 4.5
+  fps: 110
+
+api:
+  predict:
+    input: image
+    output: detections
+    format: "[x1, y1, x2, y2, confidence, class_id]"
+
+docker:
+  base_image: "ghcr.io/robotflow-labs/anima-serve:jazzy"
+  serve_port: 8080
+  gpu_required: true
+
+ros2:
+  node_name: yoloatr_node
+  input_topic: /camera/thermal
+  output_topic: /yoloatr/detections
+  input_msg: sensor_msgs/msg/Image
+  output_msg: vision_msgs/msg/Detection2DArray
+
+hf:
+  repo: "ilessio-aiflowlab/project_yoloatr-checkpoint"
+  org: "ilessio-aiflowlab"

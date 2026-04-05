@@ -1,0 +1,67 @@
+# YOLOatr Docker Compose -- Serving Infrastructure
+# Profiles: serve (full), ros2 (ROS2 only), api (FastAPI only), test
+
+services:
+  yoloatr-serve:
+    build:
+      context: .
+      dockerfile: Dockerfile.serve
+    image: anima-yoloatr:latest
+    container_name: anima-yoloatr
+    env_file: .env.serve
+    ports:
+      - "${ANIMA_SERVE_PORT:-8080}:8080"
+    volumes:
+      - /mnt/forge-data/models:/data/models:ro
+      - /mnt/artifacts-datai/exports/project_yoloatr:/data/weights:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    network_mode: host
+    restart: unless-stopped
+    profiles:
+      - serve
+      - api
+
+  yoloatr-ros2:
+    build:
+      context: .
+      dockerfile: Dockerfile.serve
+    image: anima-yoloatr:latest
+    container_name: anima-yoloatr-ros2
+    env_file: .env.serve
+    environment:
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+    volumes:
+      - /mnt/forge-data/models:/data/models:ro
+      - /mnt/artifacts-datai/exports/project_yoloatr:/data/weights:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    network_mode: host
+    restart: unless-stopped
+    profiles:
+      - serve
+      - ros2
+
+  yoloatr-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.serve
+    image: anima-yoloatr:latest
+    container_name: anima-yoloatr-test
+    env_file: .env.serve
+    command: ["python", "-m", "pytest", "tests/", "-x", "-v"]
+    volumes:
+      - ./tests:/app/tests:ro
+    profiles:
+      - test
