@@ -1,0 +1,90 @@
+# NUAA-SIRST Proxy Configuration
+# Used for development when DSIAC MWIR is unavailable
+# Single-class IR small target detection
+
+[model]
+name = "yoloatr"
+backbone = "cspdarknet53s"
+neck = "bifpn"
+num_classes = 1
+input_size = 640
+anchors_per_scale = 3
+detection_scales = 4
+class_names = ["ir_target"]
+
+[training]
+batch_size = 32
+epochs = 100
+optimizer = "sgd"
+learning_rate = 0.01
+momentum = 0.937
+weight_decay = 0.0005
+scheduler = "cosine"
+warmup_epochs = 3
+warmup_bias_lr = 0.1
+warmup_momentum = 0.8
+precision = "fp16"
+gradient_accumulation = 1
+max_grad_norm = 1.0
+seed = 42
+from_scratch = true
+num_workers = 4
+pin_memory = true
+
+[loss]
+box_gain = 0.05
+obj_gain = 1.0
+cls_gain = 0.5
+focal_gamma = 0.3
+anchor_threshold = 4.0
+label_smoothing = 0.0
+
+[augmentation]
+hsv_h = 0.015
+hsv_s = 0.7
+hsv_v = 0.4
+degrees = 3.0
+translate = 0.1
+scale = 0.3
+shear = 0.0
+perspective = 0.0005
+flipud = 0.1
+fliplr = 0.5
+mosaic = 0.1
+mixup = 0.4
+copy_paste = 0.5
+
+[data]
+train_path = "/mnt/forge-data/datasets/nuaa_sirst_yolo/images/train"
+val_path = "/mnt/forge-data/datasets/nuaa_sirst_yolo/images/val"
+test_path = "/mnt/forge-data/datasets/nuaa_sirst_yolo/images/test"
+format = "yolo"
+img_suffix = ".png"
+
+[checkpoint]
+output_dir = "/mnt/artifacts-datai/checkpoints/project_yoloatr"
+save_every_n_epochs = 10
+keep_top_k = 2
+metric = "val_map50"
+mode = "max"
+
+[logging]
+log_dir = "/mnt/artifacts-datai/logs/project_yoloatr"
+tensorboard_dir = "/mnt/artifacts-datai/tensorboard/project_yoloatr"
+
+[early_stopping]
+enabled = true
+patience = 10
+min_delta = 0.0001
+
+[evaluation]
+iou_threshold = 0.5
+conf_threshold = 0.001
+nms_threshold = 0.6
+report_dir = "/mnt/artifacts-datai/reports/project_yoloatr"
+
+[export]
+output_dir = "/mnt/artifacts-datai/exports/project_yoloatr"
+onnx_opset = 17
+trt_fp16 = true
+trt_fp32 = true
